@@ -1,5 +1,5 @@
 .env
 venv
-__pycache__
-schema.__pycache__
-services.__pycache__
+Fastapi/__pycache__
+Fastapi/schema/__pycache__
+Fastapi/services/__pycache__
