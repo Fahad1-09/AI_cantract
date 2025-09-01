@@ -1,33 +1,13 @@
-from fastapi import FastAPI, UploadFile, File ,Query
-from .pinecone_utilis import embed_and_store, generate_embedding ,index
-from PyPDF2 import PdfReader
+from fastapi import FastAPI, UploadFile, File , HTTPException
+from .pinecone_utilis import embed_and_store ,index
+from .services.pdf_parsing import read_pdf, split_text
+from .schema.pydantic_models import ProjectInput ,RetrieveResponse,DraftResponse
+from .services.drafting import generate_draft
+from .session_memory import session_store
 import tempfile
-from .pydantic_models import SearchResponse, SearchResult
 
 app = FastAPI()
 
-# Read text from PDF
-def read_pdf(file_path: str) -> str:
-    reader = PdfReader(file_path)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
-    return text
-
-# Split into word chunks
-def split_text(text: str, max_length=500):
-    words = text.split()
-    chunks, current_chunk = [], []
-    
-    for word in words:
-        if len(current_chunk) + len(word.split()) <= max_length:
-            current_chunk.append(word)
-        else:
-            chunks.append(" ".join(current_chunk))
-            current_chunk = [word]
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-    return chunks
 
 @app.get("/")
 def root():
@@ -59,38 +39,47 @@ async def ingest_pdf(file: UploadFile = File(...)):
         }
     except Exception as e:
         return {"status": "error", "details": str(e)}
-
-
-@app.post("/search/", response_model=SearchResponse)
-async def semantic_search(query: str = Query(..., description="Search query text"), top_k: int = 1):
-    try:
-        # 1. Generate embedding for query
-        query_embedding = generate_embedding(query)
-
-        # 2. Search Pinecone
-        results = index.query(
-            vector=query_embedding,
-            top_k=top_k,
-            namespace="contracts",
-            include_metadata=True
-        )
-
-        # 3. Format results
-        matches = [
-            SearchResult(
-                chunk=match['metadata']['chunk'],
-                doc_id=match['metadata']['doc_id']
-            )
-            for match in results['matches']
-        ]
-
-        return SearchResponse(
-            status="success",
-            query=query,
-            results=matches
-        )
-
-    except Exception as e:
-        return SearchResponse(status="error", query=query, results=[])
     
-    
+@app.post("/input/")
+async def project_input(details: ProjectInput):  # <-- now uses Pydantic model
+    session_id = session_store.create_session(details.dict())
+    return {
+        "session_id": session_id,
+        "message": "Project details stored",
+        "data": details.dict()  # optional: echo back for confirmation
+    }
+
+
+@app.post("/retrieve/", response_model=RetrieveResponse)
+async def retrieve_contract(session_id: str):
+    data = session_store.get(session_id)
+    if not data:
+        raise HTTPException(404, "Session not found")
+
+    # Instead of semantic search, just pull all chunks for this contract doc
+    results = index.query(
+        vector=[0.0] * 768,   # dummy vector, required by Pinecone API
+        top_k=10,
+        namespace="contracts",
+        include_metadata=True,
+        filter={"doc_id": {"$eq": "sample docs.pdf"}}  # ✅ only your base contract
+    )
+
+    chunks = [m["metadata"]["chunk"] for m in results["matches"]]
+    session_store.update(session_id, {"chunks": chunks})
+
+    return {"session_id": session_id, "chunks": chunks}
+
+@app.post("/draft/", response_model=DraftResponse)
+async def draft_contract(session_id: str):
+    data = session_store.get(session_id)
+    if not data or "chunks" not in data:
+        raise HTTPException(400, "No template chunks found. Run /retrieve first.")
+
+    # AI call with user input + 4 chunks as structure
+    draft = generate_draft(data["chunks"], data)
+    session_store.update(session_id, {"draft": draft})
+
+    return {"session_id": session_id, "draft": draft}
+
+
