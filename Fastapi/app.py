@@ -4,6 +4,7 @@ from .services.pdf_parsing import read_pdf, split_text
 from .schema.pydantic_models import ProjectInput ,RetrieveResponse,DraftResponse
 from .services.drafting import generate_draft
 from .session_memory import session_store
+from .services.compliance import check_compliance
 import tempfile
 
 app = FastAPI()
@@ -81,5 +82,21 @@ async def draft_contract(session_id: str):
     session_store.update(session_id, {"draft": draft})
 
     return {"session_id": session_id, "draft": draft}
+
+
+@app.post("/compliance/")
+async def compliance_check(session_id: str):
+    data = session_store.get(session_id)
+    if not data or "draft" not in data:
+        raise HTTPException(400, "No drafted contract found. Run /draft first.")
+
+    report = check_compliance(data["draft"])
+    session_store.update(session_id, {"compliance": report})
+
+    # Return plain text so frontend shows it nicely
+    return report
+
+
+
 
 
