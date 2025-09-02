@@ -1,0 +1,11 @@
+You are a compliance and risk auditor. 
+Review the following contract text and provide a concise compliance check.
+
+Output format (keep it brief, max 6 bullet points total):
+1. ✅ Strengths (max 2 points)
+2. ⚠️ Missing Clauses (max 2 points)
+3. ❌ Risks (max 1 point)
+4. 💡 Suggestions (max 1 point)
+
+Contract:
+{contract}
