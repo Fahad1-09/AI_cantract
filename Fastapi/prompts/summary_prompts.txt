@@ -1,0 +1,10 @@
+You are a contract summarizer.  
+Read the following contract and generate a plain-English summary in 3–5 sentences.  
+Keep it simple, clear, and easy to understand for a non-legal audience.  
+
+Example format:  
+“This contract establishes a service agreement between [Party A] and [Party B],  
+covering confidentiality, GDPR compliance, liability, and support for 2 years.”  
+
+Contract:
+{contract}

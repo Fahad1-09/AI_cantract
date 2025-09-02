@@ -5,6 +5,7 @@ from .schema.pydantic_models import ProjectInput ,RetrieveResponse,DraftResponse
 from .services.drafting import generate_draft
 from .session_memory import session_store
 from .services.compliance import check_compliance
+from .services.summary import generate_summary
 import tempfile
 
 app = FastAPI()
@@ -96,7 +97,14 @@ async def compliance_check(session_id: str):
     # Return plain text so frontend shows it nicely
     return report
 
+@app.post("/summary/")
+async def summary_contract(session_id: str):
+    data = session_store.get(session_id)
+    if not data or "draft" not in data:
+        raise HTTPException(400, "No drafted contract found. Run /draft first.")
 
+    summary = generate_summary(data["draft"])
+    session_store.update(session_id, {"summary": summary})
 
-
-
+    # Return plain text for frontend to show nicely
+    return summary
